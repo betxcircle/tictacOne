@@ -490,7 +490,7 @@ try {
       // Declare the remaining player as the winner
       const remainingPlayer = room.players[0];
 
-      io.to(roomId).emit('gameOver', { 
+      iooo.to(roomId).emit('gameOver', { 
         winnerSymbol: remainingPlayer.symbol, 
         result: `${remainingPlayer.name} wins by default!` 
       });
