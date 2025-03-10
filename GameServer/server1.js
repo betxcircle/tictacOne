@@ -2,6 +2,7 @@ const socketIOOO = require('socket.io');
 const OdinCircledbModel = require('../models/odincircledb');
 const BetModel = require('../models/BetModel');
 const WinnerModel = require('../models/WinnerModel');
+const LoserModel = require('../models/LoserModel');
 const BetCashModel = require('../models/BetCashModel');
 
 const activeRooms = {};
@@ -180,6 +181,28 @@ socket.on('sendMessage', ({ roomId, playerName, message }) => {
   iooo.to(roomId).emit('receiveMessage', { playerName, message });
 });
 
+
+ const startTurnTimer = (roomId) => {
+  const room = activeRooms[roomId];
+
+  if (!room) return;
+
+  if (room.turnTimeout) {
+    clearTimeout(room.turnTimeout); // Clear any existing timeout
+  }
+
+  // Set a new timeout
+  room.turnTimeout = setTimeout(() => {
+    console.log(`Player took too long. Auto-switching turn for room ${roomId}`);
+    
+    room.currentPlayer = (room.currentPlayer + 1) % 2; // Switch turn
+    iooo.to(roomId).emit('turnChange', room.currentPlayer % 2);
+
+    // Restart the timer for the next player
+    startTurnTimer(roomId);
+  }, 3000);
+};
+    
     
 socket.on('makeMove', async ({ roomId, index, playerName, symbol }) => {
 
@@ -194,8 +217,6 @@ socket.on('makeMove', async ({ roomId, index, playerName, symbol }) => {
   if (typeof room.currentPlayer !== 'number') {
     room.currentPlayer = 0; // Default to player 0
   }
-
-
 
 
   if (!room) {
@@ -216,18 +237,35 @@ socket.on('makeMove', async ({ roomId, index, playerName, symbol }) => {
       room.currentPlayer++;
 
       iooo.to(roomId).emit('turnChange', room.currentPlayer % 2);
+
+         // Move is made, clear the existing turn timeout
+      if (room.turnTimeout) {
+        clearTimeout(room.turnTimeout);
+      }
+
+        
       iooo.to(roomId).emit('moveMade', {
         index,
         symbol: currentPlayer.symbol,
         playerName: currentPlayer.name
       });
 
+         // Change turn
+      room.currentPlayer = (room.currentPlayer + 1) % 2;
+      iooo.to(roomId).emit('turnChange', room.currentPlayer % 2);
+     startTurnTimer(roomId); // Restart timer for next player
+
       // Check for a win or draw
       const winnerSymbol = checkWin(room.board);
       if (winnerSymbol) {
+           clearTimeout(room.turnTimeout); // **Stop turn timer if someone wins**
+          
         const winnerPlayer = room.players.find(player => player.symbol === winnerSymbol);
-        if (winnerPlayer) {
+          const loserPlayer = room.players.find(player => player.symbol !== winnerSymbol);
+          
+        if (winnerPlayer && loserPlayer) {
           const winnerUserId = winnerPlayer.userId;
+          const loserUserId = loserPlayer.userId;
           const gameResult = `${winnerPlayer.name} (${winnerSymbol}) wins!`;
 
           
@@ -235,7 +273,14 @@ socket.on('makeMove', async ({ roomId, index, playerName, symbol }) => {
           const totalBet = room.totalBet;
 
           // Emit 'gameOver' event with winner, total bet, and winner user ID
-          iooo.to(roomId).emit('gameOver', { winnerSymbol, result: gameResult, totalBet, winnerUserId, winnerPlayer });
+          iooo.to(roomId).emit('gameOver', { winnerSymbol,
+                                            result: gameResult, 
+                                            totalBet, 
+                                            winnerUserId, 
+                                            winnerPlayer,
+                                            loserUserId,
+                                            loserPlayer 
+                                           });
 
           try {
             // Update the winner's balance in the database
@@ -255,6 +300,14 @@ socket.on('makeMove', async ({ roomId, index, playerName, symbol }) => {
               } catch (error) {
               console.error('Error saving bet to database:', error.message);
                }
+                 // Save loser record
+              const newLoser = new LoserModel({
+                roomId,
+                loserName: loserUserId,
+                totalBet: totalBet,
+              });
+              await newLoser.save();
+              console.log('Loser saved to database:', newLoser);
 
             } else {
               console.error('Winner user not found');
@@ -403,13 +456,12 @@ try {
 });
 
 
-socket.on('disconnect', async () => {
+        socket.on('disconnect', async () => {
   console.log('User disconnected');
 
   // Find the room where the player has disconnected
   const roomId = Object.keys(activeRooms).find(roomId => {
     const room = activeRooms[roomId];
-    // Safeguard: Ensure the room exists and has a players array
     return room && Array.isArray(room.players) && room.players.some(player => player.socketId === socket.id);
   });
 
@@ -434,11 +486,73 @@ socket.on('disconnect', async () => {
       } catch (err) {
         console.error(`Error deleting room ${roomId} from the database:`, err);
       }
+    } else if (room.players.length === 1) {
+      // Declare the remaining player as the winner
+      const remainingPlayer = room.players[0];
+
+      io.to(roomId).emit('gameOver', { 
+        winnerSymbol: remainingPlayer.symbol, 
+        result: `${remainingPlayer.name} wins by default!` 
+      });
+
+      if (room.totalBet) {
+        try {
+          const winnerUser = await OdinCircledbModel.findById(remainingPlayer.userId);
+          if (winnerUser) {
+            winnerUser.wallet.cashoutbalance += room.totalBet;
+            await winnerUser.save();
+            console.log(`${remainingPlayer.name} has been credited with ${room.totalBet}`);
+          }
+        } catch (error) {
+          console.error("Error updating winner's balance:", error);
+        }
+      }
+
+      // Optionally, delete the room after declaring the winner
+      delete activeRooms[roomId];
     } else {
       console.log(`Remaining players in room ${roomId}:`, room.players);
     }
   }
 });
+
+
+// socket.on('disconnect', async () => {
+//   console.log('User disconnected');
+
+//   // Find the room where the player has disconnected
+//   const roomId = Object.keys(activeRooms).find(roomId => {
+//     const room = activeRooms[roomId];
+//     // Safeguard: Ensure the room exists and has a players array
+//     return room && Array.isArray(room.players) && room.players.some(player => player.socketId === socket.id);
+//   });
+
+//   if (roomId) {
+//     console.log(`Player disconnected from room ${roomId}`);
+
+//     const room = activeRooms[roomId];
+//     room.players = room.players.filter(player => player.socketId !== socket.id); // Remove the disconnected player
+
+//     if (room.players.length === 0) {
+//       // If no players are left, delete the room
+//       delete activeRooms[roomId];
+
+//       try {
+//         // Delete the room from the database
+//         const result = await BetModel.deleteOne({ roomId });
+//         if (result.deletedCount > 0) {
+//           console.log(`Room ${roomId} successfully deleted from the database.`);
+//         } else {
+//           console.warn(`Room ${roomId} not found in the database.`);
+//         }
+//       } catch (err) {
+//         console.error(`Error deleting room ${roomId} from the database:`, err);
+//       }
+//     } else {
+//       console.log(`Remaining players in room ${roomId}:`, room.players);
+//     }
+//   }
+// });
 
    
       function checkWin(board) {
