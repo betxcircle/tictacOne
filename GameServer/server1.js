@@ -236,8 +236,6 @@ socket.on('makeMove', async ({ roomId, index, playerName, symbol }) => {
       room.board[index] = currentPlayer.symbol;
       room.currentPlayer++;
 
-      iooo.to(roomId).emit('turnChange', room.currentPlayer % 2);
-
          // Move is made, clear the existing turn timeout
       if (room.turnTimeout) {
         clearTimeout(room.turnTimeout);
