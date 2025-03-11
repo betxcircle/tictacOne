@@ -204,20 +204,23 @@ socket.on('sendMessage', ({ roomId, playerName, message }) => {
 };
     
     
-socket.on('makeMove', async ({ roomId, index, playerName, symbol }) => {
 
+
+
+ socket.on('makeMove', async ({ roomId, index, playerName, symbol }) => {
   const room = activeRooms[roomId];
-  
+
   // Check if room exists and has a players array
   if (!room || !Array.isArray(room.players)) {
+    console.error(`Invalid room or players array for roomId: ${roomId}`);
     return socket.emit('invalidMove', 'Invalid game state');
   }
 
   // Initialize room.currentPlayer if necessary
   if (typeof room.currentPlayer !== 'number') {
+    console.error(`Invalid currentPlayer for roomId: ${roomId}`);
     room.currentPlayer = 0; // Default to player 0
   }
-
 
   if (!room) {
     return socket.emit('invalidMove', 'Room not found');
@@ -234,71 +237,77 @@ socket.on('makeMove', async ({ roomId, index, playerName, symbol }) => {
   if (socket.id === currentPlayer.socketId) {
     if (room.board[index] === null) {
       room.board[index] = currentPlayer.symbol;
-      room.currentPlayer++;
-
-         // Move is made, clear the existing turn timeout
+      
+      // Move is made, clear the existing turn timeout
       if (room.turnTimeout) {
         clearTimeout(room.turnTimeout);
       }
 
-        
-      iooo.to(roomId).emit('moveMade', {
-        index,
-        symbol: currentPlayer.symbol,
-        playerName: currentPlayer.name
-      });
+      // Emit move made and turn change
+      iooo.to(roomId).emit('moveMade', { index, symbol: currentPlayer.symbol, playerName: currentPlayer.name });
 
-         // Change turn
+      // Change turn
       room.currentPlayer = (room.currentPlayer + 1) % 2;
       iooo.to(roomId).emit('turnChange', room.currentPlayer % 2);
      startTurnTimer(roomId); // Restart timer for next player
 
-      // Check for a win or draw
+      // Start the turn timeout for the next player
+      // room.turnTimeout = setTimeout(() => {
+      //   console.log(`Player took too long. Auto-switching turn for room ${roomId}`);
+      //   room.currentPlayer = (room.currentPlayer + 1) % 2;
+      //   iooo.to(roomId).emit('turnChange', room.currentPlayer % 2);
+      // }, 3000);
+  
+      // **Step 2: Start a new 5-second timer for forced turn change**
+      // room.turnTimeout = setTimeout(() => {
+      //   console.log(`Player took too long. Auto-switching turn for room ${roomId}`);
+      //   room.currentPlayer = (room.currentPlayer + 1) % 2;
+      //   iooo.to(roomId).emit('turnChange', room.currentPlayer % 2);
+      // // }, 3000);
+
       const winnerSymbol = checkWin(room.board);
       if (winnerSymbol) {
-           clearTimeout(room.turnTimeout); // **Stop turn timer if someone wins**
-          
+        clearTimeout(room.turnTimeout); // **Stop turn timer if someone wins**
+        
         const winnerPlayer = room.players.find(player => player.symbol === winnerSymbol);
-          const loserPlayer = room.players.find(player => player.symbol !== winnerSymbol);
-          
+        const loserPlayer = room.players.find(player => player.symbol !== winnerSymbol);
+      
         if (winnerPlayer && loserPlayer) {
           const winnerUserId = winnerPlayer.userId;
           const loserUserId = loserPlayer.userId;
           const gameResult = `${winnerPlayer.name} (${winnerSymbol}) wins!`;
 
-          
           // Access the totalBet from the room object
           const totalBet = room.totalBet;
 
-          // Emit 'gameOver' event with winner, total bet, and winner user ID
-          iooo.to(roomId).emit('gameOver', { winnerSymbol,
-                                            result: gameResult, 
-                                            totalBet, 
-                                            winnerUserId, 
-                                            winnerPlayer,
-                                            loserUserId,
-                                            loserPlayer 
-                                           });
+          // Emit 'gameOver' event with winner and loser info
+          iooo.to(roomId).emit('gameOver', { 
+            winnerSymbol, 
+            result: gameResult, 
+            totalBet, 
+            winnerUserId, 
+            winnerPlayer, 
+            loserUserId, 
+            loserPlayer 
+          });
 
           try {
             // Update the winner's balance in the database
             const winnerUser = await OdinCircledbModel.findById(winnerUserId);
             if (winnerUser) {
-              // Add the total bet amount to the user's cashoutBalance
               winnerUser.wallet.cashoutbalance += totalBet;
               await winnerUser.save();
 
-              try {
-                const newWinner = new WinnerModel({
-                      roomId,
-                      winnerName: winnerUserId,
-                      totalBet: totalBet,
-                });
+              // Save winner record
+              const newWinner = new WinnerModel({
+                roomId,
+                winnerName: winnerUserId,
+                totalBet: totalBet,
+              });
               await newWinner.save();
-              } catch (error) {
-              console.error('Error saving bet to database:', error.message);
-               }
-                 // Save loser record
+              console.log('Winner saved to database:', newWinner);
+
+              // Save loser record
               const newLoser = new LoserModel({
                 roomId,
                 loserName: loserUserId,
@@ -306,7 +315,6 @@ socket.on('makeMove', async ({ roomId, index, playerName, symbol }) => {
               });
               await newLoser.save();
               console.log('Loser saved to database:', newLoser);
-
             } else {
               console.error('Winner user not found');
             }
@@ -315,25 +323,28 @@ socket.on('makeMove', async ({ roomId, index, playerName, symbol }) => {
           }
         }
       } else if (room.board.every((cell) => cell !== null)) {
+        clearTimeout(room.turnTimeout); // **Stop timer on draw**
+
         // It's a draw
-        iooo.to(roomId).emit('gameDraw', { winnerSymbol: null, result: "It's a draw!", winnerUserId: null });
-         // Reset the game state for a new game
-         room.board = Array(9).fill(null); // Reset the board
-      
-          // Reset the board for a new game
-       
-        room.startingPlayer = (room.startingPlayer + 1) % 2; // Toggle the starting player
+        iooo.to(roomId).emit('gameDraw', { 
+          winnerSymbol: null, 
+          result: "It's a draw!", 
+          winnerUserId: null 
+        });
+
+        // Reset the game state for a new game
+        room.board = Array(9).fill(null);
+        room.startingPlayer = (room.startingPlayer + 1) % 2;
         room.currentPlayer = room.startingPlayer;
-            // Toggle the starting player
-         iooo.to(roomId).emit('newGame', { message: "The game has been reset due to a draw. New game starting!" });
+
+        iooo.to(roomId).emit('newGame', { message: "The game has been reset due to a draw. New game starting!" });
       }
     } else {
-      socket.emit('invalidMove', 'Cell already occupied');
+      return socket.emit('invalidMove', room.board[index] !== null ? 'Cell already occupied' : "It's not your turn");
     }
-  } else {
-    socket.emit('invalidMove', 'It\'s not your turn');
   }
 });
+
 
   
 
