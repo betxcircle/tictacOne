@@ -281,15 +281,30 @@ socket.on('sendMessage', ({ roomId, playerName, message }) => {
           const totalBet = room.totalBet;
 
           // Emit 'gameOver' event with winner and loser info
-          iooo.to(roomId).emit('gameOver', { 
-            winnerSymbol, 
-            result: gameResult, 
-            totalBet, 
-            winnerUserId, 
-            winnerPlayer, 
-            loserUserId, 
-            loserPlayer 
-          });
+          // iooo.to(roomId).emit('gameOver', { 
+          //   winnerSymbol, 
+          //   result: gameResult, 
+          //   totalBet, 
+          //   winnerUserId, 
+          //   winnerPlayer, 
+          //   loserUserId, 
+          //   loserPlayer 
+          // });
+             // Emit different events for winner and loser
+  iooo.to(winnerPlayer.socketId).emit('winnerScreen', { 
+    result: gameResult, 
+    totalBet, 
+    winnerUserId, 
+    winnerPlayer 
+  });
+
+  iooo.to(loserPlayer.socketId).emit('loserScreen', { 
+    result: gameResult, 
+    totalBet, 
+    loserUserId, 
+    loserPlayer 
+  });
+
 
           try {
             // Update the winner's balance in the database
