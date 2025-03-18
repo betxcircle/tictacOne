@@ -483,109 +483,12 @@ try {
 });
 
 
-  socket.on('disconnect', async () => {
-  console.log('User disconnected');
-
-  // Find the room where the player has disconnected
-  const roomId = Object.keys(activeRooms).find(roomId => {
-    const room = activeRooms[roomId];
-    return room && Array.isArray(room.players) && room.players.some(player => player.socketId === socket.id);
-  });
-
-  if (roomId) {
-    console.log(`Player disconnected from room ${roomId}`);
-
-    const room = activeRooms[roomId];
-
-    // Find the disconnected player
-    const disconnectedPlayer = room.players.find(player => player.socketId === socket.id);
-    
-    // Remove the disconnected player
-    room.players = room.players.filter(player => player.socketId !== socket.id);
-
-    // **Check if a winner was already declared using checkWin**
-    const winnerSymbol = checkWin(room.board);
-    if (winnerSymbol) {
-      console.log(`Game already has a winner (${winnerSymbol}) in room ${roomId}. No further rewards given.`);
-      return;
-    }
-
-    if (room.players.length === 0) {
-      // No players left, delete the room
-      delete activeRooms[roomId];
-
-      try {
-        const result = await BetModel.deleteOne({ roomId });
-        if (result.deletedCount > 0) {
-          console.log(`Room ${roomId} successfully deleted from the database.`);
-        } else {
-          console.warn(`Room ${roomId} not found in the database.`);
-        }
-      } catch (err) {
-        console.error(`Error deleting room ${roomId} from the database:`, err);
-      }
-    } else {
-      // **If the game was unfinished, award the remaining player as the winner**
-      const remainingPlayer = room.players[0]; // Only one player remains
-      const winnerUserId = remainingPlayer.userId;
-      const totalBet = room.totalBet;
-
-      console.log(`Remaining player ${remainingPlayer.name} wins by default due to opponent disconnection.`);
-
-      // Declare winner
-      iooo.to(roomId).emit('gameOver', {
-        winnerSymbol: remainingPlayer.symbol,
-        result: `${remainingPlayer.name} wins by opponent disconnection!`,
-        totalBet,
-        winnerUserId,
-        winnerPlayer: remainingPlayer,
-        loserUserId: disconnectedPlayer.userId,
-        loserPlayer: disconnectedPlayer
-      });
-
-      try {
-        // Update the winner's balance in the database
-        const winnerUser = await OdinCircledbModel.findById(winnerUserId);
-        if (winnerUser) {
-          winnerUser.wallet.cashoutbalance += totalBet;
-          await winnerUser.save();
-
-          // Save winner record
-          const newWinner = new WinnerModel({
-            roomId,
-            winnerName: winnerUserId,
-            totalBet: totalBet,
-          });
-          await newWinner.save();
-          console.log('Winner saved to database:', newWinner);
-
-          // Save loser record
-          const newLoser = new LoserModel({
-            roomId,
-            loserName: disconnectedPlayer.userId,
-            totalBet: totalBet,
-          });
-          await newLoser.save();
-          console.log('Loser saved to database:', newLoser);
-        } else {
-          console.error('Winner user not found in database');
-        }
-      } catch (error) {
-        console.error('Error updating winner balance:', error);
-      }
-    }
-  }
-});
-
-
-
-// socket.on('disconnect', async () => {
+//   socket.on('disconnect', async () => {
 //   console.log('User disconnected');
 
 //   // Find the room where the player has disconnected
 //   const roomId = Object.keys(activeRooms).find(roomId => {
 //     const room = activeRooms[roomId];
-//     // Safeguard: Ensure the room exists and has a players array
 //     return room && Array.isArray(room.players) && room.players.some(player => player.socketId === socket.id);
 //   });
 
@@ -593,14 +496,25 @@ try {
 //     console.log(`Player disconnected from room ${roomId}`);
 
 //     const room = activeRooms[roomId];
-//     room.players = room.players.filter(player => player.socketId !== socket.id); // Remove the disconnected player
+
+//     // Find the disconnected player
+//     const disconnectedPlayer = room.players.find(player => player.socketId === socket.id);
+    
+//     // Remove the disconnected player
+//     room.players = room.players.filter(player => player.socketId !== socket.id);
+
+//     // **Check if a winner was already declared using checkWin**
+//     const winnerSymbol = checkWin(room.board);
+//     if (winnerSymbol) {
+//       console.log(`Game already has a winner (${winnerSymbol}) in room ${roomId}. No further rewards given.`);
+//       return;
+//     }
 
 //     if (room.players.length === 0) {
-//       // If no players are left, delete the room
+//       // No players left, delete the room
 //       delete activeRooms[roomId];
 
 //       try {
-//         // Delete the room from the database
 //         const result = await BetModel.deleteOne({ roomId });
 //         if (result.deletedCount > 0) {
 //           console.log(`Room ${roomId} successfully deleted from the database.`);
@@ -611,10 +525,151 @@ try {
 //         console.error(`Error deleting room ${roomId} from the database:`, err);
 //       }
 //     } else {
-//       console.log(`Remaining players in room ${roomId}:`, room.players);
+//       // **If the game was unfinished, award the remaining player as the winner**
+//       const remainingPlayer = room.players[0]; // Only one player remains
+//       const winnerUserId = remainingPlayer.userId;
+//       const totalBet = room.totalBet;
+
+//       console.log(`Remaining player ${remainingPlayer.name} wins by default due to opponent disconnection.`);
+
+//       // Declare winner
+//       iooo.to(roomId).emit('gameOver', {
+//         winnerSymbol: remainingPlayer.symbol,
+//         result: `${remainingPlayer.name} wins by opponent disconnection!`,
+//         totalBet,
+//         winnerUserId,
+//         winnerPlayer: remainingPlayer,
+//         loserUserId: disconnectedPlayer.userId,
+//         loserPlayer: disconnectedPlayer
+//       });
+
+//       try {
+//         // Update the winner's balance in the database
+//         const winnerUser = await OdinCircledbModel.findById(winnerUserId);
+//         if (winnerUser) {
+//           winnerUser.wallet.cashoutbalance += totalBet;
+//           await winnerUser.save();
+
+//           // Save winner record
+//           const newWinner = new WinnerModel({
+//             roomId,
+//             winnerName: winnerUserId,
+//             totalBet: totalBet,
+//           });
+//           await newWinner.save();
+//           console.log('Winner saved to database:', newWinner);
+
+//           // Save loser record
+//           const newLoser = new LoserModel({
+//             roomId,
+//             loserName: disconnectedPlayer.userId,
+//             totalBet: totalBet,
+//           });
+//           await newLoser.save();
+//           console.log('Loser saved to database:', newLoser);
+//         } else {
+//           console.error('Winner user not found in database');
+//         }
+//       } catch (error) {
+//         console.error('Error updating winner balance:', error);
+//       }
 //     }
 //   }
 // });
+
+
+
+socket.on('disconnect', async () => {
+  console.log(`User ${socket.id} disconnected`);
+
+  // Find the room where the player was active
+  const roomId = Object.keys(activeRooms).find(roomId => {
+    const room = activeRooms[roomId];
+    return room && Array.isArray(room.players) && room.players.some(player => player.socketId === socket.id);
+  });
+
+  if (!roomId) return; // If no room found, exit
+
+  console.log(`Player disconnected from room ${roomId}`);
+  const room = activeRooms[roomId];
+
+  // Find and remove the disconnected player
+  const disconnectedPlayer = room.players.find(player => player.socketId === socket.id);
+  room.players = room.players.filter(player => player.socketId !== socket.id);
+
+  // If the game already has a winner, do nothing
+  const winnerSymbol = checkWin(room.board);
+  if (winnerSymbol) {
+    console.log(`Game in room ${roomId} already has a winner (${winnerSymbol}). No further actions.`);
+    return;
+  }
+
+  if (room.players.length === 0) {
+    // No players left, delete room data
+    delete activeRooms[roomId];
+    console.log(`Room ${roomId} deleted from memory.`);
+
+    try {
+      const result = await BetModel.deleteOne({ roomId });
+      if (result.deletedCount > 0) {
+        console.log(`Room ${roomId} deleted from database.`);
+      } else {
+        console.warn(`Room ${roomId} not found in database.`);
+      }
+    } catch (err) {
+      console.error(`Error deleting room ${roomId} from database:`, err);
+    }
+  } else {
+    // Award the remaining player as the winner
+    const remainingPlayer = room.players[0]; // The only remaining player
+    const winnerUserId = remainingPlayer.userId;
+    const totalBet = room.totalBet;
+
+    console.log(`Remaining player ${remainingPlayer.name} wins by default.`);
+
+    iooo.to(roomId).emit('gameOver', {
+      winnerSymbol: remainingPlayer.symbol,
+      result: `${remainingPlayer.name} wins by opponent disconnection!`,
+      totalBet,
+      winnerUserId,
+      winnerPlayer: remainingPlayer,
+      loserUserId: disconnectedPlayer.userId,
+      loserPlayer: disconnectedPlayer
+    });
+
+    try {
+      // Update the winner's wallet balance
+      const winnerUser = await OdinCircledbModel.findById(winnerUserId);
+      if (winnerUser) {
+        winnerUser.wallet.cashoutbalance += totalBet;
+        await winnerUser.save();
+
+        // Save winner & loser records
+        await WinnerModel.create({
+          roomId,
+          winnerName: winnerUserId,
+          totalBet
+        });
+
+        await LoserModel.create({
+          roomId,
+          loserName: disconnectedPlayer.userId,
+          totalBet
+        });
+
+        console.log(`Winner ${winnerUserId} and loser ${disconnectedPlayer.userId} saved in database.`);
+      } else {
+        console.error(`Winner user ${winnerUserId} not found in database.`);
+      }
+    } catch (error) {
+      console.error('Error updating winner balance:', error);
+    }
+  }
+
+  // Clean up the socket reference
+  socket.removeAllListeners();
+});
+
 
    
       function checkWin(board) {
