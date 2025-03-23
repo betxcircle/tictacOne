@@ -83,7 +83,7 @@ socket.on("joinRoom", async ({ playerName, userId, amount, expoPushToken, roomId
 
     // Notify others in the room
     socket.to(room.roomId).emit("playerJoined", { playerName, roomId: room.roomId });
-    io.to(room.roomId).emit("playersUpdate", room.players);
+    iooo.to(room.roomId).emit("playersUpdate", room.players);
 
     console.log(`🔄 Updated Room ${room.roomId} Players List:`, room.players);
 
@@ -92,14 +92,14 @@ socket.on("joinRoom", async ({ playerName, userId, amount, expoPushToken, roomId
        startGame(room)
         console.log(`🎮 Game in Room ${room.roomId} is READY!`);
 
-        io.to(room.roomId).emit("gameReady", {
+        iooo.to(room.roomId).emit("gameReady", {
             players: room.players.map((p) => ({ name: p.name, symbol: p.symbol, amount: p.amount })),
             roomId: room.roomId,
             amount: room.amount,
         });
 
         room.currentPlayer = room.startingPlayer;
-        io.to(room.roomId).emit("turnChange", room.currentPlayer);
+        iooo.to(room.roomId).emit("turnChange", room.currentPlayer);
     }
       // Notify players about whose turn it is
       iooo.to(roomId).emit('turnChange', room.currentPlayer);
@@ -130,8 +130,8 @@ socket.on("joinRoom", async ({ playerName, userId, amount, expoPushToken, roomId
     console.log('No valid Expo push token found for the first player.');
   }
 
-    }
-});
+}
+          });
 
 
 
