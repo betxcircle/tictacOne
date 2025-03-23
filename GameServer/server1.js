@@ -52,6 +52,13 @@ const startSocketServer1 = (httpServer) => {
     const playerNumber = room.players.length + 1;
     const playerSymbol = playerNumber === 1 ? 'X' : 'O';
 
+        // Store bet amount for each player
+if (playerNumber === 1) {
+  room.player1Bet = totalBet;
+} else if (playerNumber === 2) {
+  room.player2Bet = totalBet;
+}
+
     // Add the player to the room
     room.players.push({
       name: playerName,
@@ -86,7 +93,10 @@ const startSocketServer1 = (httpServer) => {
         });
       
     // Emit the updated player list to everyone in the room
-    iooo.to(roomId).emit('playersUpdate', room.players);
+    iooo.to(roomId).emit('playersUpdate',
+                         room.players,   
+                         player1Bet: room.player1Bet,
+                         player2Bet: room.player2Bet,);
 
     // Check if the room now has two players
     if (room.players.length === 2) {
