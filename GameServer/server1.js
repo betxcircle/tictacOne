@@ -93,10 +93,11 @@ if (playerNumber === 1) {
         });
       
     // Emit the updated player list to everyone in the room
-    iooo.to(roomId).emit('playersUpdate',
-                         room.players,   
-                         player1Bet: room.player1Bet,
-                         player2Bet: room.player2Bet,);
+  iooo.to(roomId).emit('playersUpdate', {
+  players: room.players,
+  player1Bet: room.player1Bet,
+  player2Bet: room.player2Bet,
+});
 
     // Check if the room now has two players
     if (room.players.length === 2) {
