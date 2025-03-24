@@ -130,7 +130,7 @@ socket.on("joinRoom", async ({ playerName, userId, amount, expoPushToken, roomId
     console.log('No valid Expo push token found for the first player.');
   }
 
-}
+}}
           });
 
 
