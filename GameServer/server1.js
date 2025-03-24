@@ -156,14 +156,14 @@ async function startGame(room) {
 
         if (!player1 || !player2) {
             console.log("❌ Error: One or both players not found in the database.");
-            io.to(room.roomId).emit("invalidGameStart", "Players not found");
+            iooo.to(room.roomId).emit("invalidGameStart", "Players not found");
             return;
         }
 
         // Check if both players have enough balance
         if (player1.wallet.balance < room.amount || player2.wallet.balance < room.amount) {
             console.log("❌ Error: One or both players have insufficient balance.");
-            io.to(room.roomId).emit("invalidGameStart", "One or both players have insufficient balance");
+            iooo.to(room.roomId).emit("invalidGameStart", "One or both players have insufficient balance");
             return;
         }
 
@@ -181,14 +181,14 @@ async function startGame(room) {
         console.log(`💰 Balance deducted from both players. Total Bet: ${room.totalBet}`);
 
         // Emit updated balances to players
-        io.to(player1.socketId).emit("balanceUpdated", { newBalance: player1.wallet.balance });
-        io.to(player2.socketId).emit("balanceUpdated", { newBalance: player2.wallet.balance });
+        iooo.to(player1.socketId).emit("balanceUpdated", { newBalance: player1.wallet.balance });
+        iooo.to(player2.socketId).emit("balanceUpdated", { newBalance: player2.wallet.balance });
 
         // Emit game start event
        // io.to(room.roomId).emit("gameStart", { message: "Game is starting!", room });
     } catch (error) {
         console.error("❌ Error starting game:", error);
-        io.to(room.roomId).emit("invalidGameStart", "Server error while starting the game");
+        iooo.to(room.roomId).emit("invalidGameStart", "Server error while starting the game");
     }
 }
 
