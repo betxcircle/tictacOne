@@ -24,8 +24,7 @@ const startSocketServer1 = (httpServer) => {
 socket.on("joinRoom", async ({ playerName, userId, amount, expoPushToken, roomId }) => {
     console.log(`🔹 Player ${playerName} (ID: ${userId}) is trying to join Room: ${roomId} with bet amount: ${amount}`);
 
-    // Validate required fields
-    if (!playerName || !userId || amount == null || !roomId) {
+ if (!playerName || !userId || amount == null || !roomId) {
         console.log("❌ Error: Missing required fields.");
         return socket.emit("invalidJoin", "Missing required fields");
     }
