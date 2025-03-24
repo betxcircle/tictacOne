@@ -47,7 +47,7 @@ socket.on("joinRoom", async ({ playerName, userId, amount, expoPushToken, roomId
             startingPlayer: 0,
             amount,
         };
-        activeRooms[newRoomId] = room;
+        activeRooms[roomId] = room;
     }
 
     // If room is full, reject the request
@@ -550,7 +550,7 @@ socket.on('sendMessage', ({ roomId, playerName, message }) => {
 
   
 
-socket.on('placeBet', async ({ roomId, userId, playerNumber, playerName, betAmount }) => {
+socket.on('placeBe', async ({ roomId, userId, playerNumber, playerName, betAmount }) => {
   
    // Initialize room if it doesn't exist
    if (!activeRooms[roomId]) {
