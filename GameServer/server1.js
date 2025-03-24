@@ -20,25 +20,28 @@ const startSocketServer1 = (httpServer) => {
     iooo.on('connection', (socket) => {
         console.log('A user connected tic1');
 
+
 socket.on("joinRoom", async ({ playerName, userId, amount, expoPushToken, roomId }) => {
-    console.log(`🔹 Player ${playerName} (ID: ${userId}) is trying to join a room with bet amount: ${amount}`);
+    console.log(`🔹 Player ${playerName} (ID: ${userId}) is trying to join Room: ${roomId} with bet amount: ${amount}`);
 
     // Validate required fields
-    if (!playerName || !userId || amount == null) {
+    if (!playerName || !userId || amount == null || !roomId) {
         console.log("❌ Error: Missing required fields.");
         return socket.emit("invalidJoin", "Missing required fields");
     }
 
-    // Look for an existing room with space
-    let room = Object.values(activeRooms).find(r => r.amount === amount && r.players.length < 2);
+    // Check if the room already exists with the same roomId and amount
+    let room = activeRooms[roomId];
 
     if (room) {
-        console.log(`🔍 Found an existing room: ${room.roomId} with ${room.players.length} players.`);
+        if (room.amount !== amount) {
+            console.log(`🚫 Room ${roomId} exists but with a different bet amount.`);
+            return socket.emit("mismatchedAmount", "The room exists but with a different bet amount.");
+        }
+        console.log(`🔍 Found existing room: ${room.roomId} with ${room.players.length} players.`);
     } else {
         // No available room, create a new one
-        //const newRoomId = generateRoomId();
         console.log(`🆕 Creating a new Room with ID: ${roomId}`);
-
         room = {
             roomId,
             players: [],
@@ -78,60 +81,57 @@ socket.on("joinRoom", async ({ playerName, userId, amount, expoPushToken, roomId
     socket.join(room.roomId);
     console.log(`✅ ${playerName} joined Room ${room.roomId} as Player ${playerNumber}`);
 
-    // **NEW** - Emit event to inform the player they successfully joined
+    // Emit event to inform the player they successfully joined
     socket.emit("roomJoined", { roomId: room.roomId, amount, players: room.players });
 
     // Notify others in the room
     socket.to(room.roomId).emit("playerJoined", { playerName, roomId: room.roomId });
-    iooo.to(room.roomId).emit("playersUpdate", room.players);
+    io.to(room.roomId).emit("playersUpdate", room.players);
 
     console.log(`🔄 Updated Room ${room.roomId} Players List:`, room.players);
 
     // If 2 players are present, start the game
     if (room.players.length === 2) {
-       startGame(room)
+        startGame(room);
         console.log(`🎮 Game in Room ${room.roomId} is READY!`);
 
-        iooo.to(room.roomId).emit("gameReady", {
+        io.to(room.roomId).emit("gameReady", {
             players: room.players.map((p) => ({ name: p.name, symbol: p.symbol, amount: p.amount })),
             roomId: room.roomId,
             amount: room.amount,
         });
 
         room.currentPlayer = room.startingPlayer;
-        iooo.to(room.roomId).emit("turnChange", room.currentPlayer);
-    }
-      // Notify players about whose turn it is
-      iooo.to(roomId).emit('turnChange', room.currentPlayer);
+        io.to(room.roomId).emit("turnChange", room.currentPlayer);
         
-      const firstPlayer = room.players[0]; // Retrieve the first player's info
+        // Notify players whose turn it is
+        io.to(room.roomId).emit('turnChange', room.currentPlayer);
+        
+        const firstPlayer = room.players[0]; // Retrieve the first player's info
   
-      // Fetch first player's push token from the database
-      const recipient = await OdinCircledbModel.findById(firstPlayer.userId); // Assuming `userId` matches DB _id
-  
+        // Fetch first player's push token from the database
+        const recipient = await OdinCircledbModel.findById(firstPlayer.userId); // Assuming `userId` matches DB _id
 
-    if (recipient && recipient.expoPushToken) {
+        if (recipient && recipient.expoPushToken) {
+            // Notification details
+            const notificationTitle = 'Game Ready!';
+            const notificationBody = `${playerName} has joined. The game is ready to start!`;
+            const notificationData = { roomId, playerName };
 
-    // Notification details
-    const notificationTitle = 'Game Ready!';
-    const notificationBody = `${playerName} has joined. The game is ready to start!`;
-    const notificationData = { roomId, playerName };
+            // Send the push notification
+            await sendPushNotification(
+                recipient.expoPushToken,
+                notificationTitle,
+                notificationBody,
+                notificationData
+            );
 
-    // Send the push notification
-    await sendPushNotification(
-      recipient.expoPushToken,
-      notificationTitle,
-      notificationBody,
-      notificationData
-    );
-
-    console.log('Push notification sent successfully to the first player.');
-  } else {
-    console.log('No valid Expo push token found for the first player.');
-  }
-
-          });
-
+            console.log('📩 Push notification sent successfully to the first player.');
+        } else {
+            console.log('⚠️ No valid Expo push token found for the first player.');
+        }
+    }
+});
 
 
 socket.on("checkRoom", ({ roomId }, callback) => {
